@@ -22,7 +22,6 @@ export default function PostsFeedPage() {
   const [replyInputs, setReplyInputs] = useState<{ [postId: string]: string }>(
     {}
   );
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [likesCount, setLikesCount] = useState<{ [postId: string]: number }>(
     {}
   );
@@ -47,8 +46,8 @@ export default function PostsFeedPage() {
       try {
         const postsData: (Post & { replies?: ReplyResponse[] })[] =
           await fetchPostsWithReplies(user?.access_token || "");
-        // Sort posts so the latest (highest id) is first
         postsData.sort((a, b) => Number(b.id) - Number(a.id));
+
         setPosts(postsData);
 
         const likeCounts: { [postId: string]: number } = {};
@@ -69,7 +68,7 @@ export default function PostsFeedPage() {
       setLoadingPosts(false);
     }
     fetchData();
-  }, [user?.access_token]);
+  }, [user?.access_token, user?.username]);
 
   // Live update reply count after posting or fetching
   const handleRepliesFetched = useCallback((postId: string, count: number) => {
@@ -90,32 +89,35 @@ export default function PostsFeedPage() {
       {
         onSuccess: (data) => {
           setLikesCount((prev) => ({ ...prev, [postId]: data.likes }));
-          setLikedPosts((prev) => {
-            const updated = new Set(prev);
-            if (data.liked) updated.add(postId);
-            else updated.delete(postId);
-            return updated;
-          });
+
+          // Update the post.likedby field for instant highlight
+          setPosts((oldPosts) =>
+            oldPosts.map((p) =>
+              p.id === postId
+                ? {
+                    ...p,
+                    likedby: data.liked
+                      ? [...(p.likedby ?? []), user?.username ?? ""]
+                      : (p.likedby ?? []).filter((u) => u !== user?.username),
+                  }
+                : p
+            )
+          );
         },
       }
     );
   }
 
-  // PATCH: handleSaveEdit to accept { message, new_content, post_id } response
   async function handleSaveEdit(postId: string, newContent: string) {
     return new Promise<void>((resolve, reject) => {
       updatePostMutation.mutate(
         { post_id: postId, new_content: newContent },
         {
-          onSuccess: (
-            data: {
-              message: string;
-              new_content: string;
-              post_id: string | number;
-            },
-            _variables,
-            _context
-          ) => {
+          onSuccess: (data: {
+            message: string;
+            new_content: string;
+            post_id: string | number;
+          }) => {
             setPosts(
               (old) =>
                 old.map((p) =>
@@ -136,7 +138,6 @@ export default function PostsFeedPage() {
     });
   }
 
-  // Share logic
   function handleShare(platform: string, post: Post) {
     const url =
       typeof window !== "undefined"
@@ -189,7 +190,6 @@ export default function PostsFeedPage() {
     setOpenShareId(null);
   }
 
-  // WebSocket real-time updates
   useEffect(() => {
     if (!socketRef.current) {
       const socket = io(API_URL, {
@@ -218,14 +218,7 @@ export default function PostsFeedPage() {
           likedByMe?: boolean;
         }) => {
           setLikesCount((prev) => ({ ...prev, [postId]: likes }));
-          if (likedByMe !== undefined) {
-            setLikedPosts((prev) => {
-              const updated = new Set(prev);
-              if (likedByMe) updated.add(postId);
-              else updated.delete(postId);
-              return updated;
-            });
-          }
+          // live highlight will be handled by likedby array on refresh
         }
       );
       socket.on(
@@ -249,6 +242,8 @@ export default function PostsFeedPage() {
     };
   }, []);
 
+  const userUsername = user?.username ?? "";
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-blue-50 flex flex-col">
       <section className="max-w-2xl w-full mx-auto flex-1 py-4 px-1 sm:px-3 md:px-0">
@@ -268,7 +263,7 @@ export default function PostsFeedPage() {
                 key={post.id ?? `temp-${idx}`}
                 post={post}
                 userId={user?.id}
-                liked={likedPosts.has(post.id)}
+                userUsername={userUsername}
                 likes={likesCount[post.id] ?? post.likes}
                 repliesCount={repliesCount[post.id] || 0}
                 onLike={() => handleLike(post.id)}

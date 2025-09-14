@@ -6,7 +6,9 @@ import Footer from "@/components/landing/Footer";
 import { Heart, MessageCircle, Share2, Smile } from "lucide-react";
 import { toast } from "react-hot-toast";
 
-const API_URL = process.env.NEXT_PUBLIC_API_BASE || "https://mindspace-backend-gusv.onrender.com";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_BASE ||
+  "https://mindspace-backend-gusv.onrender.com";
 
 type Reply = {
   id?: string;
@@ -25,6 +27,7 @@ type Post = {
   username?: string;
   likes: number;
   replies?: Reply[];
+  likedby?: string[]; // <-- For highlighting like button
 };
 
 type Profile = {
@@ -35,12 +38,18 @@ type Profile = {
 
 function getFirstNameInitial(profile: Profile): string {
   if (!profile) return "U";
-  if (profile.role === "user" && profile.firstname) return profile.firstname[0].toUpperCase();
-  if (profile.role === "counselor" && profile.fullname) return profile.fullname[0].toUpperCase();
+  if (profile.role === "user" && profile.firstname)
+    return profile.firstname[0].toUpperCase();
+  if (profile.role === "counselor" && profile.fullname)
+    return profile.fullname[0].toUpperCase();
   return "U";
 }
 
-export default function SinglePostPage({ params }: { params: Promise<{ id: string }> }) {
+export default function SinglePostPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { user } = useAuth();
   const { data: profile } = useProfile();
   const [post, setPost] = useState<Post | null>(null);
@@ -48,9 +57,10 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
   const [composer, setComposer] = useState("");
   const [replyValue, setReplyValue] = useState("");
   const [replies, setReplies] = useState<Reply[]>([]);
-  const [repliesCount, setRepliesCount] = useState<{ [postId: string]: number }>({});
+  const [repliesCount, setRepliesCount] = useState<{
+    [postId: string]: number;
+  }>({});
   const [likes, setLikes] = useState(0);
-  const [liked, setLiked] = useState(false);
   const [authError, setAuthError] = useState(false);
 
   // Unwrap params for Next.js v14+ (if you use dynamic route [id])
@@ -64,21 +74,15 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
       try {
         const res = await fetch(`${API_URL}/express/get_post_replies?id=${id}`);
         if (!res.ok) throw new Error("Post not found");
-        const postArray: Post[] = await res.json(); // specify type here
+        // Backend returns likedby array!
+        const postArray: Post[] = await res.json();
 
         // Find the post whose id matches the requested id
         const actualPost = postArray.find((p) => String(p.id) === String(id));
 
         if (!actualPost) throw new Error("Post not found!");
 
-        setPost({
-          id: actualPost.id,
-          user_id: actualPost.user_id,
-          content: actualPost.content,
-          username: actualPost.username,
-          likes: actualPost.likes,
-          replies: actualPost.replies || [],
-        });
+        setPost(actualPost);
         setLikes(actualPost.likes);
         setReplies(actualPost.replies || []);
         setRepliesCount({ [actualPost.id]: (actualPost.replies || []).length });
@@ -92,7 +96,7 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
       setLoading(false);
     }
     loadPostAndReplies();
-  }, [id, user?.access_token]);
+  }, [id, user?.access_token, user?.username]);
 
   // Like post handler
   async function handleLike() {
@@ -108,7 +112,18 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
       });
       const data = await res.json();
       setLikes(data.likes);
-      setLiked(data.liked);
+
+      // Update likedby array for instant highlight
+      setPost((prev) =>
+        prev
+          ? {
+              ...prev,
+              likedby: data.liked
+                ? [...(prev.likedby ?? []), user.username ?? ""]
+                : (prev.likedby ?? []).filter((u) => u !== user.username),
+            }
+          : prev
+      );
     } catch {
       toast.error("Failed to update like!");
     }
@@ -167,8 +182,15 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
     toast.success("Link copied to clipboard!");
   }
 
+  // Determine liked by checking if username is in likedby array
+  const userUsername = user?.username ?? "";
+  const actuallyLiked = post?.likedby?.includes(userUsername) ?? false;
+
   if (loading) return <div className="p-8 text-center">Loading...</div>;
-  if (!post) return <div className="p-8 text-center text-red-500">Post not found (404)</div>;
+  if (!post)
+    return (
+      <div className="p-8 text-center text-red-500">Post not found (404)</div>
+    );
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-blue-50 flex flex-col">
@@ -199,16 +221,16 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
                 </button>
                 <button
                   className={`flex items-center gap-1 hover:bg-teal-50 p-1 sm:p-2 rounded transition font-semibold ${
-                    liked ? "text-teal-600" : "text-teal-500"
+                    actuallyLiked ? "text-teal-600" : "text-teal-500"
                   }`}
                   onClick={handleLike}
-                  title={liked ? "Unlike" : "Like"}
+                  title={actuallyLiked ? "Unlike" : "Like"}
                   disabled={!user?.access_token}
                 >
                   <Heart
                     className="w-5 h-5"
-                    color={liked ? "#14b8a6" : "#14b8a6"}
-                    fill={liked ? "#14b8a6" : "none"}
+                    color={actuallyLiked ? "#14b8a6" : "#14b8a6"}
+                    fill={actuallyLiked ? "#14b8a6" : "none"}
                   />
                   <span>{likes}</span>
                 </button>
@@ -226,7 +248,9 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
         </div>
         {/* Replies Section */}
         <div className="bg-white rounded-2xl shadow border border-teal-100 p-2 sm:p-4 md:p-6">
-          <h3 className="text-teal-700 font-bold mb-3 sm:mb-4 text-base sm:text-lg">Replies</h3>
+          <h3 className="text-teal-700 font-bold mb-3 sm:mb-4 text-base sm:text-lg">
+            Replies
+          </h3>
           {authError ? (
             <div className="text-red-500 text-sm mb-6">
               You must be logged in to view and post replies.
@@ -246,7 +270,11 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
                 <button
                   onClick={handleReply}
                   className="mt-2 bg-gradient-to-tr from-teal-500 to-blue-400 hover:from-teal-600 hover:to-blue-500 text-white px-4 sm:px-6 py-2 rounded-xl font-bold shadow-md transition text-xs sm:text-sm"
-                  disabled={!replyValue || replyValue.trim() === "" || !user?.access_token}
+                  disabled={
+                    !replyValue ||
+                    replyValue.trim() === "" ||
+                    !user?.access_token
+                  }
                 >
                   <Smile className="w-5 h-5 inline mr-1" />
                   Reply
@@ -258,11 +286,14 @@ export default function SinglePostPage({ params }: { params: Promise<{ id: strin
                 <ul className="space-y-2 sm:space-y-3">
                   {replies.map((reply, idx) => (
                     <li
-                      key={reply.id ?? `${reply.user_id}_${idx}_${reply.content}`}
+                      key={
+                        reply.id ?? `${reply.user_id}_${idx}_${reply.content}`
+                      }
                       className="bg-white border border-teal-100 rounded-xl px-2 py-2 sm:px-4 sm:py-3 shadow flex items-start gap-2 sm:gap-3"
                     >
                       <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-teal-400 to-blue-300 flex items-center justify-center font-bold text-white text-base sm:text-lg">
-                        {typeof reply.username === "string" && reply.username.length > 0
+                        {typeof reply.username === "string" &&
+                        reply.username.length > 0
                           ? reply.username[0].toUpperCase()
                           : "A"}
                       </div>

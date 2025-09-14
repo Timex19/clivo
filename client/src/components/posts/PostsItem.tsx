@@ -22,12 +22,13 @@ export interface Post {
   username: string | null;
   likes: number;
   replies?: ReplyResponse[];
+  likedby?: string[]; // <- Use likedby as in your backend response!
 }
 
 export interface PostItemProps {
   post: Post;
   userId: string | undefined;
-  liked: boolean;
+  userUsername?: string;
   likes: number;
   repliesCount: number;
   onLike: () => void;
@@ -49,7 +50,7 @@ export interface PostItemProps {
 export default function PostItem({
   post,
   userId,
-  liked,
+  userUsername,
   likes,
   repliesCount,
   onLike,
@@ -72,6 +73,17 @@ export default function PostItem({
 
   const isOwner = String(post.user_id) === String(userId);
 
+  // Debug log
+  console.log("PostItem highlight debug:", {
+    postId: post.id,
+    likedby: post.likedby,
+    userUsername,
+    highlight: post.likedby?.includes(userUsername ?? ""),
+  });
+
+  // Highlight if current user is in likedby array
+  const actuallyLiked = post.likedby?.includes(userUsername ?? "") ?? false;
+
   function handleEdit() {
     setEditing(true);
     setEditContent(post.content);
@@ -88,7 +100,6 @@ export default function PostItem({
 
   return (
     <div className="bg-white rounded-3xl shadow-lg border border-teal-100 p-4 sm:p-6 relative">
-      {/* Edit icon top-right for owner, responsive and smaller on mobile */}
       {isOwner && !editing && (
         <button
           className={`
@@ -198,17 +209,17 @@ export default function PostItem({
             </button>
             <button
               className={`flex items-center gap-1 hover:bg-teal-50 p-2 rounded transition font-semibold ${
-                liked ? "text-teal-600" : "text-teal-500"
+                actuallyLiked ? "text-teal-600" : "text-teal-500"
               }`}
               disabled={!userId}
               onClick={onLike}
               tabIndex={-1}
-              title={liked ? "Unlike" : "Like"}
+              title={actuallyLiked ? "Unlike" : "Like"}
             >
               <Heart
                 className="w-5 h-5"
                 color={tealColor}
-                fill={liked ? tealColor : "none"}
+                fill={actuallyLiked ? tealColor : "none"}
               />
               <span>{likes}</span>
             </button>

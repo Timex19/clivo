@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Heart,
   MessageCircle,
-  Repeat2,
+  Gift,
   Share2,
   X as XIcon,
   Facebook,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { ReplyResponse } from "@/lib/mutations";
 import RepliesSection from "./RepliesSection";
+import GiftModal from "./GiftModal";
 
 const tealColor = "#14b8a6";
 
@@ -22,13 +23,13 @@ export interface Post {
   username: string | null;
   likes: number;
   replies?: ReplyResponse[];
-  likedby?: string[]; // <- Use likedby as in your backend response!
+  likedby?: string[];
 }
 
 export interface PostItemProps {
   post: Post;
   userId: string | undefined;
-  userUsername?: string;
+  userUsername?: string; // current user's username
   likes: number;
   repliesCount: number;
   onLike: () => void;
@@ -70,16 +71,9 @@ export default function PostItem({
 }: PostItemProps) {
   const [editing, setEditing] = useState<boolean>(false);
   const [editContent, setEditContent] = useState<string>(post.content);
+  const [showGiftModal, setShowGiftModal] = useState(false);
 
   const isOwner = String(post.user_id) === String(userId);
-
-  // Debug log
-  console.log("PostItem highlight debug:", {
-    postId: post.id,
-    likedby: post.likedby,
-    userUsername,
-    highlight: post.likedby?.includes(userUsername ?? ""),
-  });
 
   // Highlight if current user is in likedby array
   const actuallyLiked = post.likedby?.includes(userUsername ?? "") ?? false;
@@ -199,13 +193,16 @@ export default function PostItem({
               <MessageCircle className="w-5 h-5" color={tealColor} />
               <span>{repliesCount}</span>
             </button>
+            {/* Gift Button */}
             <button
-              className="flex items-center gap-1 hover:bg-teal-50 p-2 rounded transition font-semibold"
+              className="flex items-center gap-1 hover:bg-yellow-50 p-2 rounded transition font-semibold"
               tabIndex={-1}
-              title="Repost"
+              title="Send Gift"
+              onClick={() => setShowGiftModal(true)}
             >
-              <Repeat2 className="w-5 h-5" color={tealColor} />
-              <span>0</span>
+              <Gift className="w-5 h-5 text-yellow-400" />{" "}
+              {/* gold color for gift */}
+              <span>Gift</span>
             </button>
             <button
               className={`flex items-center gap-1 hover:bg-teal-50 p-2 rounded transition font-semibold ${
@@ -306,6 +303,7 @@ export default function PostItem({
           )}
         </div>
       </div>
+      <GiftModal open={showGiftModal} setOpen={setShowGiftModal} />
     </div>
   );
 }
